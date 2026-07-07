@@ -1,0 +1,101 @@
+services:
+    laravel.test:
+        build:
+            context: './vendor/laravel/sail/runtimes/8.3'
+            dockerfile: Dockerfile
+            args:
+                WWWGROUP: '${WWWGROUP}'
+        image: 'sail-8.3/app'
+        extra_hosts:
+            - 'host.docker.internal:host-gateway'
+        ports:
+            - '${APP_PORT:-80}:80'
+            - '${VITE_PORT:-5173}:${VITE_PORT:-5173}'
+        environment:
+            WWWUSER: '${WWWUSER}'
+            LARAVEL_SAIL: 1
+            XDEBUG_MODE: '${SAIL_XDEBUG_MODE:-off}'
+            XDEBUG_CONFIG: '${SAIL_XDEBUG_CONFIG:-client_host=host.docker.internal}'
+            IGNITION_LOCAL_SITES_PATH: '${PWD}'
+            # FIX REG-2 (ACCEPTANCE_REPORT.md): causa raíz del healthcheck inestable.
+            # `php artisan serve` usa el servidor embebido de PHP, que por defecto
+            # atiende UNA sola petición a la vez. Con `schedule:work` corriendo en
+            # paralelo, el GET /up del healthcheck se encolaba detrás de cualquier
+            # request en vuelo (tiempos observados de 9-16s > timeout de 5s) y el
+            # contenedor flapeaba a `unhealthy`. PHP_CLI_SERVER_WORKERS forkea N
+            # workers, permitiendo servir el healthcheck concurrentemente y
+            # eliminando el head-of-line blocking. Ajustable vía .env.
+            PHP_CLI_SERVER_WORKERS: '${PHP_CLI_SERVER_WORKERS:-8}'
+        volumes:
+            - '.:/var/www/html'
+            - './docker/supervisor/supervisord.conf:/etc/supervisor/conf.d/supervisord.conf'
+        networks:
+            - sail
+        depends_on:
+            pgsql:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+        # FIX REG-2: además del fix de raíz (PHP_CLI_SERVER_WORKERS arriba), se
+        # da holgura al healthcheck. `artisan serve` bootea Laravel por request
+        # (sin opcache persistente como PHP-FPM), así que un arranque en frío
+        # puede tardar; timeout 10s y start_period 40s absorben esos picos sin
+        # generar falsos negativos. interval/retries se mantienen.
+        healthcheck:
+            test:
+                - CMD
+                - curl
+                - '-f'
+                - 'http://localhost/up'
+            interval: 10s
+            retries: 5
+            timeout: 10s
+            start_period: 40s
+    pgsql:
+        image: 'postgres:18-alpine'
+        ports:
+            - '${FORWARD_DB_PORT:-5432}:5432'
+        environment:
+            PGPASSWORD: '${DB_PASSWORD:-secret}'
+            POSTGRES_DB: '${DB_DATABASE}'
+            POSTGRES_USER: '${DB_USERNAME}'
+            POSTGRES_PASSWORD: '${DB_PASSWORD:-secret}'
+        volumes:
+            - 'sail-pgsql:/var/lib/postgresql'
+            - './vendor/laravel/sail/database/pgsql/create-testing-database.sql:/docker-entrypoint-initdb.d/10-create-testing-database.sql'
+        networks:
+            - sail
+        healthcheck:
+            test:
+                - CMD
+                - pg_isready
+                - '-q'
+                - '-d'
+                - '${DB_DATABASE}'
+                - '-U'
+                - '${DB_USERNAME}'
+            retries: 3
+            timeout: 5s
+    redis:
+        image: 'redis:alpine'
+        ports:
+            - '${FORWARD_REDIS_PORT:-6379}:6379'
+        volumes:
+            - 'sail-redis:/data'
+        networks:
+            - sail
+        healthcheck:
+            test:
+                - CMD
+                - redis-cli
+                - ping
+            retries: 3
+            timeout: 5s
+networks:
+    sail:
+        driver: bridge
+volumes:
+    sail-pgsql:
+        driver: local
+    sail-redis:
+        driver: local

@@ -1,0 +1,35 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    level: 8
+    paths:
+        - app
+        - database/migrations
+        - database/seeders
+
+    excludePaths:
+        analyseAndScan:
+            # Scripts ad-hoc / archivos opcionales (deuda técnica, ver Sprint Limpieza)
+            - app/Console/Kernel.php (?)
+
+    # Reglas relajadas pertinentes a un proyecto Laravel real
+    checkOctaneCompatibility: false
+    checkModelProperties: false
+    checkUnusedViews: false
+
+    # Patrones de ignore se acumulan durante el sprint — algunos aplican a código
+    # que aún no existe (Controllers en D9). No reportar patterns sin match para
+    # mantener la build verde durante el desarrollo incremental.
+    reportUnmatchedIgnoredErrors: false
+
+    ignoreErrors:
+        # Laravel resolve() y app() vuelven mixed en muchos casos
+        - identifier: missingType.iterableValue
+          paths:
+              - app/Http/Controllers/*
+        # Tinker macros y otras facadas dinámicas
+        - '#Call to an undefined static method Illuminate\\Support\\Facades\\.*::macro\(\)#'
+
+    universalObjectCratesClasses:
+        - Illuminate\Http\Request
