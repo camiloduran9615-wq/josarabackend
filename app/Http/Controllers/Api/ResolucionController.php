@@ -2,10 +2,13 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Exceptions\FactusIntegrationException;
 use App\Http\Controllers\Controller;
 use App\Models\Tenant\Resolucion;
 use App\Services\FactusService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class ResolucionController extends Controller
 {
@@ -29,10 +32,31 @@ class ResolucionController extends Controller
      */
     public function syncFromFactus()
     {
-        $ranges = $this->factusService->getNumberingRanges();
+        try {
+            $ranges = $this->factusService->getNumberingRanges();
+        } catch (FactusIntegrationException $e) {
+            Log::warning('factus.resoluciones_sync_failed', $this->factusLogContext([
+                'error_type' => $e::class,
+                'external_status' => $e->externalStatus(),
+            ]));
+
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], $e->clientStatus());
+        } catch (Throwable $e) {
+            Log::error('factus.resoluciones_sync_unexpected_error', $this->factusLogContext([
+                'error_type' => $e::class,
+            ]));
+
+            return response()->json([
+                'success' => false,
+                'message' => 'No fue posible sincronizar las resoluciones DIAN. Intenta nuevamente.',
+            ], 500);
+        }
         
         if (!$ranges || !isset($ranges['data'])) {
-            return response()->json(['success' => false, 'message' => 'No se pudieron obtener rangos de Factus'], 422);
+            return response()->json(['success' => false, 'message' => 'No se pudieron obtener rangos de Factus'], 502);
         }
 
         $count = 0;
@@ -57,6 +81,20 @@ class ResolucionController extends Controller
             'success' => true,
             'message' => "Se han sincronizado {$count} resoluciones correctamente."
         ]);
+    }
+
+    /**
+     * @param array<string, mixed> $extra
+     * @return array<string, mixed>
+     */
+    private function factusLogContext(array $extra = []): array
+    {
+        return array_merge([
+            'tenant_id' => tenant('id'),
+            'tenant_slug' => tenant('tenant_slug') ?: tenant('company_code') ?: tenant('id'),
+            'user_id' => auth()->id(),
+            'endpoint' => 'resoluciones/sync',
+        ], $extra);
     }
 
     public function store(Request $request)

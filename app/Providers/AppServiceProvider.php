@@ -53,6 +53,22 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        $allowedOrigins = array_values(array_filter(array_map(
+            static fn (string $origin): string => trim($origin),
+            explode(',', (string) env('CORS_ALLOWED_ORIGINS', env('APP_URL', 'https://josara.colombiaapp.fun'))),
+        )));
+
+        config([
+            'cors.paths' => ['api/*', 'sanctum/csrf-cookie'],
+            'cors.allowed_methods' => ['*'],
+            'cors.allowed_origins' => $allowedOrigins,
+            'cors.allowed_origins_patterns' => [],
+            'cors.allowed_headers' => ['Authorization', 'Content-Type', 'X-Requested-With', 'Accept'],
+            'cors.exposed_headers' => [],
+            'cors.max_age' => 0,
+            'cors.supports_credentials' => false,
+        ]);
+
         /**
          * Usar el PersonalAccessToken del tenant activo.
          * Esto garantiza que los tokens de Sanctum se validen contra la DB

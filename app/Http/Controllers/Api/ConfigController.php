@@ -2,16 +2,18 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Exceptions\FactusIntegrationException;
 use App\Http\Controllers\Controller;
 use App\Models\Tenant\Config;
 use App\Services\FactusService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
 
 class ConfigController extends Controller
 {
@@ -271,26 +273,33 @@ class ConfigController extends Controller
             'factus_mode' => 'nullable|in:sandbox,production',
         ]);
 
-        foreach (self::FACTUS_PUBLIC_KEYS as $key) {
-            if (array_key_exists($key, $validated)) {
-                Config::set($key, $validated[$key]);
+        try {
+            foreach (self::FACTUS_PUBLIC_KEYS as $key) {
+                if (array_key_exists($key, $validated)) {
+                    Config::set($key, $validated[$key]);
+                }
             }
-        }
-        foreach (self::FACTUS_SECRET_KEYS as $key) {
-            $val = $validated[$key] ?? null;
-            if ($val !== null && $val !== '') {
-                Config::set($key, Crypt::encryptString($val));
+            foreach (self::FACTUS_SECRET_KEYS as $key) {
+                $val = $validated[$key] ?? null;
+                if ($val !== null && $val !== '') {
+                    Config::set($key, Crypt::encryptString($val));
+                }
             }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Configuración de Factus actualizada.',
+            ]);
+        } catch (Throwable $e) {
+            Log::error('factus.config_update_failed', $this->factusLogContext('configs/factus', [
+                'error_type' => $e::class,
+            ]));
+
+            return response()->json([
+                'success' => false,
+                'message' => 'No fue posible guardar la configuración de Factus. Intenta nuevamente.',
+            ], 500);
         }
-
-        // Invalidar el token cacheado del tenant para forzar re-auth con las nuevas credenciales.
-        $tenantId = tenant('id');
-        Cache::forget("factus_access_token_{$tenantId}");
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Configuración de Factus actualizada.',
-        ]);
     }
 
     /**
@@ -312,11 +321,39 @@ class ConfigController extends Controller
                 'success' => false,
                 'message' => 'No se obtuvo token. Revisa las credenciales.',
             ], 422);
-        } catch (\Throwable $e) {
+        } catch (FactusIntegrationException $e) {
+            Log::warning('factus.connection_test_failed', $this->factusLogContext('configs/factus/test', [
+                'error_type' => $e::class,
+                'external_status' => $e->externalStatus(),
+            ]));
+
             return response()->json([
                 'success' => false,
-                'message' => 'Error al conectar con Factus: '.$e->getMessage(),
-            ], 422);
+                'message' => $e->getMessage(),
+            ], $e->clientStatus());
+        } catch (Throwable $e) {
+            Log::error('factus.connection_test_unexpected_error', $this->factusLogContext('configs/factus/test', [
+                'error_type' => $e::class,
+            ]));
+
+            return response()->json([
+                'success' => false,
+                'message' => 'No fue posible probar la conexión con Factus. Intenta nuevamente.',
+            ], 500);
         }
+    }
+
+    /**
+     * @param array<string, mixed> $extra
+     * @return array<string, mixed>
+     */
+    private function factusLogContext(string $endpoint, array $extra = []): array
+    {
+        return array_merge([
+            'tenant_id' => tenant('id'),
+            'tenant_slug' => tenant('tenant_slug') ?: tenant('company_code') ?: tenant('id'),
+            'user_id' => auth()->id(),
+            'endpoint' => $endpoint,
+        ], $extra);
     }
 }

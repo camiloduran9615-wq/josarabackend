@@ -2,11 +2,12 @@
 
 namespace App\Services;
 
+use App\Exceptions\FactusIntegrationException;
 use App\Models\Tenant\Config as TenantConfig;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class FactusService
 {
@@ -69,22 +70,13 @@ class FactusService
         }
     }
 
-    protected function cacheKey(): string
-    {
-        return $this->tenantId
-            ? "factus_access_token_{$this->tenantId}"
-            : 'factus_access_token';
-    }
-
     /**
      * Obtiene el token de acceso, usándolo de la caché si es posible.
      * El cache es tenant-scoped para evitar fuga de tokens entre empresas.
      */
     public function getAccessToken()
     {
-        return Cache::remember($this->cacheKey(), 3300, function () { // 55 minutos
-            return $this->requestNewToken();
-        });
+        return $this->requestNewToken();
     }
 
     /**
@@ -92,8 +84,10 @@ class FactusService
      */
     protected function requestNewToken()
     {
+        $this->ensureConfigured();
+
         try {
-            $response = Http::asForm()->post("{$this->baseUrl}/oauth/token", [
+            $response = Http::timeout(15)->asForm()->post("{$this->baseUrl}/oauth/token", [
                 'grant_type' => 'password',
                 'client_id' => $this->clientId,
                 'client_secret' => $this->clientSecret,
@@ -105,11 +99,28 @@ class FactusService
                 return $response->json()['access_token'];
             }
 
-            Log::error('Factus Auth Error: ' . $response->body());
-            throw new \Exception('Error de autenticación con Factus');
-        } catch (\Exception $e) {
-            Log::error('Factus Connection Error: ' . $e->getMessage());
+            Log::warning('factus.auth_failed', $this->safeLogContext([
+                'external_status' => $response->status(),
+            ]));
+
+            $clientStatus = in_array($response->status(), [400, 401, 403, 422], true) ? 422 : 502;
+
+            throw new FactusIntegrationException(
+                'No fue posible autenticar con Factus. Verifica las credenciales configuradas.',
+                $clientStatus,
+                $response->status(),
+            );
+        } catch (FactusIntegrationException $e) {
             throw $e;
+        } catch (Throwable $e) {
+            Log::error('factus.auth_connection_error', $this->safeLogContext([
+                'error_type' => $e::class,
+            ]));
+
+            throw new FactusIntegrationException(
+                'Factus no respondió a la solicitud de autenticación. Intenta nuevamente.',
+                502,
+            );
         }
     }
 
@@ -142,11 +153,27 @@ class FactusService
     public function getNumberingRanges()
     {
         $token = $this->getAccessToken();
+        $lastStatus = null;
 
         foreach (['/v1/numbering-ranges', '/v2/numbering-ranges'] as $path) {
-            $response = Http::withToken($token)
-                ->acceptJson()
-                ->get("{$this->baseUrl}{$path}");
+            try {
+                $response = Http::timeout(15)
+                    ->withToken($token)
+                    ->acceptJson()
+                    ->get("{$this->baseUrl}{$path}");
+            } catch (Throwable $e) {
+                Log::error('factus.numbering_ranges_connection_error', $this->safeLogContext([
+                    'endpoint' => $path,
+                    'error_type' => $e::class,
+                ]));
+
+                throw new FactusIntegrationException(
+                    'Factus no respondió al consultar las resoluciones DIAN.',
+                    502,
+                );
+            }
+
+            $lastStatus = $response->status();
 
             if ($response->successful()) {
                 $json = $response->json();
@@ -169,10 +196,62 @@ class FactusService
                     ])->toArray(),
                 ];
             }
+
+            Log::warning('factus.numbering_ranges_failed', $this->safeLogContext([
+                'endpoint' => $path,
+                'external_status' => $response->status(),
+            ]));
         }
 
-        Log::error('Factus Numbering Ranges Error: no endpoint respondió correctamente');
-        return null;
+        throw new FactusIntegrationException(
+            'No se pudieron obtener las resoluciones DIAN desde Factus.',
+            502,
+            $lastStatus,
+        );
+    }
+
+    private function ensureConfigured(): void
+    {
+        $missing = [];
+        foreach ([
+            'factus_base_url' => $this->baseUrl,
+            'factus_client_id' => $this->clientId,
+            'factus_client_secret' => $this->clientSecret,
+            'factus_username' => $this->username,
+            'factus_password' => $this->password,
+        ] as $key => $value) {
+            if (! is_string($value) || trim($value) === '') {
+                $missing[] = $key;
+            }
+        }
+
+        if ($missing === []) {
+            return;
+        }
+
+        Log::notice('factus.config_missing', $this->safeLogContext([
+            'missing_keys' => $missing,
+        ]));
+
+        throw new FactusIntegrationException(
+            'La configuración de Factus no está completa para esta empresa.',
+            404,
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $extra
+     * @return array<string, mixed>
+     */
+    private function safeLogContext(array $extra = []): array
+    {
+        return array_merge([
+            'tenant_id' => $this->tenantId,
+            'tenant_slug' => function_exists('tenant') && tenant()
+                ? (tenant('tenant_slug') ?: tenant('company_code') ?: tenant('id'))
+                : null,
+            'user_id' => auth()->id(),
+        ], $extra);
     }
 
     /**
