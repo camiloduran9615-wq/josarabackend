@@ -37,7 +37,7 @@ return [
 
     'dane' => [
         'divipola_url' => env('DANE_DIVIPOLA_URL'),
-        'allowed_hosts' => env('DANE_ALLOWED_HOSTS', 'www.dane.gov.co,dane.gov.co,www.datos.gov.co,datos.gov.co'),
+        'allowed_hosts' => env('DANE_ALLOWED_HOSTS', 'www.dane.gov.co,dane.gov.co,geoportal.dane.gov.co,www.datos.gov.co,datos.gov.co'),
         'timeout' => env('DANE_HTTP_TIMEOUT', 20),
         'max_bytes' => env('DANE_MAX_BYTES', 5242880),
     ],

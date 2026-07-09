@@ -31,12 +31,7 @@ class MunicipioDaneController extends Controller
             ->orderBy('municipio_nombre');
 
         if ($search = $request->query('search')) {
-            $term = '%' . strtolower((string) $search) . '%';
-            $query->where(function ($q) use ($term, $search) {
-                $q->whereRaw('LOWER(municipio_nombre) LIKE ?', [$term])
-                  ->orWhere('codigo_dane', 'LIKE', "%{$search}%")
-                  ->orWhereRaw('LOWER(departamento_nombre) LIKE ?', [$term]);
-            });
+            $this->applySearch($query, (string) $search);
         }
 
         if ($depto = $request->query('departamento')) {
@@ -64,12 +59,7 @@ class MunicipioDaneController extends Controller
             ->orderBy('municipio_nombre');
 
         if ($search = $request->query('search')) {
-            $term = '%' . strtolower((string) $search) . '%';
-            $query->where(function ($q) use ($term, $search) {
-                $q->whereRaw('LOWER(municipio_nombre) LIKE ?', [$term])
-                  ->orWhere('codigo_dane', 'LIKE', "%{$search}%")
-                  ->orWhereRaw('LOWER(departamento_nombre) LIKE ?', [$term]);
-            });
+            $this->applySearch($query, (string) $search);
         }
 
         if ($depto = $request->query('departamento')) {
@@ -91,8 +81,6 @@ class MunicipioDaneController extends Controller
             'total'   => $municipios->count(),
         ]);
     }
-
-
 
     /**
      * GET /api/v1/{tenant}/municipios-dane/sync/status
@@ -250,6 +238,22 @@ class MunicipioDaneController extends Controller
             'success' => true,
             'data'    => $this->serialize($municipio),
         ]);
+    }
+
+    private function applySearch($query, string $search): void
+    {
+        $term = '%' . mb_strtolower($search) . '%';
+        $plainTerm = '%' . strtr(mb_strtolower($search), [
+            'á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ü' => 'u', 'ñ' => 'n',
+        ]) . '%';
+
+        $query->where(function ($q) use ($term, $plainTerm, $search) {
+            $q->whereRaw('LOWER(municipio_nombre) LIKE ?', [$term])
+              ->orWhereRaw("translate(LOWER(municipio_nombre), 'áéíóúüñ', 'aeiouun') LIKE ?", [$plainTerm])
+              ->orWhere('codigo_dane', 'LIKE', "%{$search}%")
+              ->orWhereRaw('LOWER(departamento_nombre) LIKE ?', [$term])
+              ->orWhereRaw("translate(LOWER(departamento_nombre), 'áéíóúüñ', 'aeiouun') LIKE ?", [$plainTerm]);
+        });
     }
 
     /** Estructura unificada hacia el frontend (alias consistentes). */

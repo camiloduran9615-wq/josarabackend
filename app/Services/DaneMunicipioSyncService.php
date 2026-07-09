@@ -18,7 +18,7 @@ class DaneMunicipioSyncService
     {
         $this->allowedHosts = array_values(array_filter(array_map(
             'trim',
-            explode(',', (string) config('services.dane.allowed_hosts', 'www.dane.gov.co,dane.gov.co,www.datos.gov.co,datos.gov.co')),
+            explode(',', (string) config('services.dane.allowed_hosts', 'www.dane.gov.co,dane.gov.co,geoportal.dane.gov.co,www.datos.gov.co,datos.gov.co')),
         )));
     }
 
@@ -97,8 +97,64 @@ class DaneMunicipioSyncService
         }
 
         $rows = $this->parseBody($body, (string) $response->header('Content-Type'));
+        $rows = $this->hydrateGeoportalDepartments($rows, $url);
 
         return $this->syncRows($rows, $url);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
+     */
+    private function hydrateGeoportalDepartments(array $rows, string $source): array
+    {
+        if (! str_contains($source, 'geoportal.dane.gov.co/laboratorio/serviciosjson/gestion_divipola/municipios.php')) {
+            return $rows;
+        }
+
+        $departmentsUrl = 'https://geoportal.dane.gov.co/laboratorio/serviciosjson/gestion_divipola/departamentos.php?vigencia=0';
+        $response = Http::timeout((int) config('services.dane.timeout', 20))
+            ->retry(2, 300)
+            ->acceptJson()
+            ->get($departmentsUrl);
+
+        if (! $response->successful()) {
+            return $rows;
+        }
+
+        $payload = $response->json();
+        $departments = is_array($payload) ? ($payload['resultado'] ?? []) : [];
+        if (! is_array($departments)) {
+            return $rows;
+        }
+
+        $names = [];
+        foreach ($departments as $department) {
+            if (! is_array($department)) {
+                continue;
+            }
+
+            $code = isset($department['CODIGO_DEPARTAMENTO']) ? trim((string) $department['CODIGO_DEPARTAMENTO']) : null;
+            $name = isset($department['NOMBRE_DEPARTAMENTO']) ? trim((string) $department['NOMBRE_DEPARTAMENTO']) : null;
+            if ($code !== null && $name !== null && $code !== '' && $name !== '') {
+                $names[str_pad($code, 2, '0', STR_PAD_LEFT)] = $name;
+            }
+        }
+
+        foreach ($rows as &$row) {
+            if (! is_array($row)) {
+                continue;
+            }
+
+            $departmentCode = isset($row['CODIGO_DEPARTAMENTO']) ? trim((string) $row['CODIGO_DEPARTAMENTO']) : null;
+            if ($departmentCode !== null) {
+                $departmentCode = str_pad($departmentCode, 2, '0', STR_PAD_LEFT);
+                $row['NOMBRE_DEPARTAMENTO'] = $row['NOMBRE_DEPARTAMENTO'] ?? $names[$departmentCode] ?? null;
+            }
+        }
+        unset($row);
+
+        return $rows;
     }
 
     /**
@@ -113,7 +169,7 @@ class DaneMunicipioSyncService
                 throw new RuntimeException('La fuente DANE no contiene JSON válido.');
             }
 
-            $rows = $json['data'] ?? $json['results'] ?? $json;
+            $rows = $json['data'] ?? $json['results'] ?? $json['resultado'] ?? $json;
             if (! is_array($rows)) {
                 throw new RuntimeException('La fuente DANE JSON no contiene una lista de municipios.');
             }
@@ -173,7 +229,7 @@ class DaneMunicipioSyncService
         }
 
         $codigo = $this->first($normalized, [
-            'codigo_dane', 'codigo', 'codigodane', 'cod_municipio', 'codigomunicipio', 'codmpio', 'mpio_ccdgo', 'divipola',
+            'codigo_dane', 'codigo', 'codigodane', 'codigo_dpto_mpio', 'cod_municipio', 'codigomunicipio', 'codmpio', 'mpio_ccdgo', 'mpio_cdpmp', 'divipola',
         ]);
         $municipio = $this->first($normalized, [
             'municipio_nombre', 'nombre', 'municipio', 'nombre_municipio', 'nom_municipio', 'mpio_cnmbr', 'entidad_territorial',
