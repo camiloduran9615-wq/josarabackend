@@ -8,6 +8,7 @@ use App\Models\Tenant\FacturaRetencion;
 use App\Models\Tenant\Tercero;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class ReportController extends Controller
 {
@@ -84,12 +85,14 @@ class ReportController extends Controller
      *
      * Por el mismo motivo que withholdings: NO filtramos por estado='validado'.
      */
-    public function certificate(Request $request, $terceroId)
+    public function certificate(Request $request, string $tenant, string $terceroId)
     {
         $request->validate([
             'start_date' => 'required|date',
             'end_date' => 'required|date',
         ]);
+
+        abort_unless(Str::isUuid($terceroId), 404);
 
         $tercero = Tercero::findOrFail($terceroId);
 
@@ -453,12 +456,14 @@ class ReportController extends Controller
      * Diferencia con certificate(): allí el tercero es CLIENTE (nos retiene
      * a nosotros); aquí el tercero es PROVEEDOR (le retuvimos nosotros).
      */
-    public function certificateRetefuentePracticada(Request $request, $terceroId)
+    public function certificateRetefuentePracticada(Request $request, string $tenant, string $terceroId)
     {
         $request->validate([
             'start_date' => 'required|date',
             'end_date'   => 'required|date',
         ]);
+
+        abort_unless(Str::isUuid($terceroId), 404);
 
         $tercero = Tercero::findOrFail($terceroId);
 
