@@ -107,12 +107,17 @@ class MunicipioDaneController extends Controller
                 'data'    => $result,
             ]);
         } catch (Throwable $e) {
-            report($e);
+            $message = $e->getMessage();
+            $status = str_contains($message, 'No hay fuente DANE configurada') ? 422 : 502;
+
+            if ($status === 502) {
+                report($e);
+            }
 
             return response()->json([
                 'success' => false,
-                'message' => $e->getMessage(),
-            ], 502);
+                'message' => $message,
+            ], $status);
         }
     }
 
