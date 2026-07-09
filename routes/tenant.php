@@ -52,6 +52,7 @@ use App\Http\Controllers\Api\SucursalController;
 use App\Http\Controllers\Api\TerceroController;
 use App\Http\Controllers\Api\TipoComprobanteController;
 use App\Http\Controllers\Api\TipoDocumentoIngresoController;
+use App\Http\Controllers\Api\UnidadMedidaDianController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Middleware\InitializeTenancyByTenantIdentifier;
 use Illuminate\Support\Facades\Route;
@@ -189,6 +190,10 @@ Route::prefix('api/v1/{tenant}')
             Route::post('configs/factus/test', [ConfigController::class, 'testFactus']);
 
             // Gestión de Inventarios
+            Route::get('unidades-medida-dian', [UnidadMedidaDianController::class, 'index']);
+            Route::post('unidades-medida-dian', [UnidadMedidaDianController::class, 'store']);
+            Route::put('unidades-medida-dian/{codigo}', [UnidadMedidaDianController::class, 'update']);
+            Route::delete('unidades-medida-dian/{codigo}', [UnidadMedidaDianController::class, 'destroy']);
             Route::apiResource('productos', ProductoController::class);
             Route::post('productos/movimiento', [ProductoController::class, 'registrarMovimiento']);
 
