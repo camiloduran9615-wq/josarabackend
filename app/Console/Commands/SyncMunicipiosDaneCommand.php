@@ -66,13 +66,13 @@ class SyncMunicipiosDaneCommand extends Command
                 continue;
             }
             $municipio = MunicipioDane::query()->updateOrCreate(
-                ['codigo' => $row['codigo']],
+                ['codigo_dane' => str_pad((string) $row['codigo'], 5, '0', STR_PAD_LEFT)],
                 [
-                    'nombre'              => $row['nombre'],
-                    'departamento_codigo' => $row['departamento_codigo'],
-                    'departamento_nombre' => $row['departamento_nombre'] ?? '',
-                    'region'              => $row['region'] ?? null,
-                    'es_capital'          => $row['es_capital'] ?? false,
+                    'municipio_nombre'    => trim((string) $row['nombre']),
+                    'departamento_dane'   => str_pad((string) $row['departamento_codigo'], 2, '0', STR_PAD_LEFT),
+                    'departamento_nombre' => trim((string) ($row['departamento_nombre'] ?? '')),
+                    'region'              => isset($row['region']) ? trim((string) $row['region']) : null,
+                    'activo'              => $row['activo'] ?? true,
                 ],
             );
             $municipio->wasRecentlyCreated ? $insertados++ : $actualizados++;

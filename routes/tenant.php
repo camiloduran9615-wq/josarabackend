@@ -31,6 +31,7 @@ use App\Http\Controllers\Api\ImpuestoController;
 use App\Http\Controllers\Api\InformacionExogenaController;
 use App\Http\Controllers\Api\KardexController;
 use App\Http\Controllers\Api\LibroMayorController;
+use App\Http\Controllers\Api\MunicipioDaneController;
 use App\Http\Controllers\Api\NominaController;
 use App\Http\Controllers\Api\NotaCreditoController;
 use App\Http\Controllers\Api\NotaDebitoController;
@@ -105,6 +106,13 @@ Route::prefix('api/v1/{tenant}')
             Route::apiResource('users', UserController::class);
             Route::put('users/{id}/password', [UserController::class, 'changePassword'])
                 ->name('users.password');
+
+
+            // Catálogo central DANE administrable desde Configuración.
+            Route::get('municipios-dane', [MunicipioDaneController::class, 'adminIndex']);
+            Route::post('municipios-dane', [MunicipioDaneController::class, 'store']);
+            Route::put('municipios-dane/{codigo}', [MunicipioDaneController::class, 'update']);
+            Route::delete('municipios-dane/{codigo}', [MunicipioDaneController::class, 'destroy']);
 
             // Gestión de Terceros
             Route::get('terceros/search-dian', [TerceroController::class, 'searchDian']);

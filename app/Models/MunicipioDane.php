@@ -18,6 +18,8 @@ use Illuminate\Database\Eloquent\Model;
  */
 class MunicipioDane extends Model
 {
+    protected $connection = 'pgsql';
+
     protected $table      = 'municipios_dane';
     protected $primaryKey = 'codigo_dane';
     public $incrementing  = false;
