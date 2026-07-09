@@ -92,6 +92,25 @@ class MunicipioDaneController extends Controller
         ]);
     }
 
+
+
+    /**
+     * GET /api/v1/{tenant}/municipios-dane/sync/status
+     * Expone si la fuente oficial DANE está configurada sin revelar URLs completas al frontend.
+     */
+    public function syncStatus(): JsonResponse
+    {
+        $source = (string) config('services.dane.divipola_url', '');
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'configured' => $source !== '',
+                'host' => $source !== '' ? parse_url($source, PHP_URL_HOST) : null,
+            ],
+        ]);
+    }
+
     /**
      * POST /api/v1/{tenant}/municipios-dane/sync
      * Sincroniza el catálogo central desde una fuente oficial configurada.
