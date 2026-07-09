@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
-use App\Models\MunicipioDane;
+use App\Services\DaneMunicipioSyncService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\File;
+use RuntimeException;
 
 /**
  * Importa el catálogo completo DIVIPOLA desde un archivo JSON oficial.
@@ -27,11 +28,37 @@ use Illuminate\Support\Facades\File;
  */
 class SyncMunicipiosDaneCommand extends Command
 {
-    protected $signature = 'municipios:sync {--truncate : Borra todos los municipios antes de cargar}';
-    protected $description = 'Importa el catálogo DIVIPOLA desde storage/app/municipios_dane.json';
+    protected $signature = 'municipios:sync {--truncate : Borra todos los municipios antes de cargar} {--source= : Sincroniza desde una URL oficial configurada o explícita}';
+    protected $description = 'Importa o sincroniza el catálogo DIVIPOLA DANE';
 
-    public function handle(): int
+    public function handle(DaneMunicipioSyncService $syncService): int
     {
+        if ($this->option('truncate')) {
+            if (! $this->confirm('Esto borrará TODOS los municipios. ¿Continuar?')) {
+                return Command::SUCCESS;
+            }
+            \App\Models\MunicipioDane::query()->delete();
+            $this->info('Tabla municipios_dane vaciada.');
+        }
+
+        if ($this->option('source') || config('services.dane.divipola_url')) {
+            try {
+                if ($this->option('source')) {
+                    config(['services.dane.divipola_url' => (string) $this->option('source')]);
+                }
+                $result = $syncService->syncFromConfiguredSource();
+                $this->info("✓ Procesados: {$result['processed']}");
+                $this->info("✓ Insertados: {$result['inserted']}");
+                $this->info("✓ Actualizados: {$result['updated']}");
+                $this->info("✓ Omitidos: {$result['skipped']}");
+                $this->info("✓ Total municipios: {$result['total']}");
+                return Command::SUCCESS;
+            } catch (RuntimeException $e) {
+                $this->error($e->getMessage());
+                return Command::FAILURE;
+            }
+        }
+
         $path = storage_path('app/municipios_dane.json');
 
         if (!File::exists($path)) {
@@ -48,42 +75,12 @@ class SyncMunicipiosDaneCommand extends Command
             return Command::FAILURE;
         }
 
-        if ($this->option('truncate')) {
-            if (!$this->confirm('Esto borrará TODOS los municipios. ¿Continuar?')) {
-                return Command::SUCCESS;
-            }
-            MunicipioDane::query()->delete();
-            $this->info('Tabla municipios_dane vaciada.');
-        }
-
-        $bar = $this->output->createProgressBar(count($json));
-        $bar->start();
-
-        $insertados = 0;
-        $actualizados = 0;
-        foreach ($json as $row) {
-            if (!isset($row['codigo'], $row['nombre'], $row['departamento_codigo'])) {
-                continue;
-            }
-            $municipio = MunicipioDane::query()->updateOrCreate(
-                ['codigo_dane' => str_pad((string) $row['codigo'], 5, '0', STR_PAD_LEFT)],
-                [
-                    'municipio_nombre'    => trim((string) $row['nombre']),
-                    'departamento_dane'   => str_pad((string) $row['departamento_codigo'], 2, '0', STR_PAD_LEFT),
-                    'departamento_nombre' => trim((string) ($row['departamento_nombre'] ?? '')),
-                    'region'              => isset($row['region']) ? trim((string) $row['region']) : null,
-                    'activo'              => $row['activo'] ?? true,
-                ],
-            );
-            $municipio->wasRecentlyCreated ? $insertados++ : $actualizados++;
-            $bar->advance();
-        }
-
-        $bar->finish();
-        $this->newLine(2);
-        $this->info("✓ Insertados: {$insertados}");
-        $this->info("✓ Actualizados: {$actualizados}");
-        $this->info("✓ Total municipios: " . MunicipioDane::query()->count());
+        $result = $syncService->syncRows($json, $path);
+        $this->info("✓ Procesados: {$result['processed']}");
+        $this->info("✓ Insertados: {$result['inserted']}");
+        $this->info("✓ Actualizados: {$result['updated']}");
+        $this->info("✓ Omitidos: {$result['skipped']}");
+        $this->info("✓ Total municipios: {$result['total']}");
 
         return Command::SUCCESS;
     }

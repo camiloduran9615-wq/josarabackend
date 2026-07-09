@@ -110,6 +110,7 @@ Route::prefix('api/v1/{tenant}')
 
             // Catálogo central DANE administrable desde Configuración.
             Route::get('municipios-dane', [MunicipioDaneController::class, 'adminIndex']);
+            Route::post('municipios-dane/sync', [MunicipioDaneController::class, 'sync']);
             Route::post('municipios-dane', [MunicipioDaneController::class, 'store']);
             Route::put('municipios-dane/{codigo}', [MunicipioDaneController::class, 'update']);
             Route::delete('municipios-dane/{codigo}', [MunicipioDaneController::class, 'destroy']);

@@ -6,8 +6,10 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\MunicipioDane;
+use App\Services\DaneMunicipioSyncService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Throwable;
 
 /**
  * Endpoint público (catálogo DANE compartido — no requiere tenant).
@@ -88,6 +90,30 @@ class MunicipioDaneController extends Controller
             'data'    => $municipios->map(fn ($m) => $this->serialize($m)),
             'total'   => $municipios->count(),
         ]);
+    }
+
+    /**
+     * POST /api/v1/{tenant}/municipios-dane/sync
+     * Sincroniza el catálogo central desde una fuente oficial configurada.
+     */
+    public function sync(DaneMunicipioSyncService $syncService): JsonResponse
+    {
+        try {
+            $result = $syncService->syncFromConfiguredSource();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Catálogo DANE sincronizado correctamente.',
+                'data'    => $result,
+            ]);
+        } catch (Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 502);
+        }
     }
 
     /**
