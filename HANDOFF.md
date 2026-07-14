@@ -899,3 +899,107 @@ El dictamen vigente se mantiene:
 **NO APTO PARA PRODUCCIÓN POR FALTA DE EVIDENCIA FUNCIONAL.**
 
 Solo debe cambiar después de completar y firmar la matriz QA sin fallos P0/P1.
+
+## 31. Modelo operativo durante la implementación con empresas — 2026-07-14
+
+JOSARA ya está siendo utilizado por varias empresas durante su implementación. El dictamen de release “NO APTO PARA PRODUCCIÓN POR FALTA DE EVIDENCIA FUNCIONAL” no significa que la plataforma sea inutilizable ni que deba detenerse automáticamente. Significa que todavía no existe evidencia suficiente para certificar formalmente todos los flujos, aislamiento y condiciones operativas.
+
+Mientras existan usuarios reales, se trabajará en dos carriles:
+
+### Carril 1 — Producción: estabilización e incidentes
+
+Producción se utilizará únicamente para diagnosticar y corregir problemas que afecten a las empresas activas.
+
+- Admitido: hotfixes pequeños, focalizados, reversibles y respaldados por evidencia.
+- Admitido: correcciones P0/P1, errores 500, autenticación, aislamiento, facturación, bloqueos de flujo y defectos que impidan implementación.
+- No admitido: refactorizaciones amplias, upgrades masivos, experimentos, cambios cosméticos extensos o nuevas funcionalidades sin pasar por QA.
+- Cada incidente debe tener un commit independiente, rollback explícito y verificación posterior.
+- Nunca ejecutar `migrate:fresh`, seeders generales o suites de prueba contra bases productivas.
+- No modificar/eliminar datos productivos directamente sin backup, diagnóstico, autorización específica y trazabilidad.
+- No emitir documentos Factus reales durante diagnóstico. Usar sandbox cuando la prueba implique emisión.
+- No copiar en chats o documentos tokens, contraseñas, NIT completos, PII, payloads fiscales ni secretos.
+
+Flujo obligatorio:
+
+```text
+Reporte del incidente
+→ clasificación P0/P1/P2/P3
+→ respaldo y evidencia inicial
+→ revisión de logs sanitizados
+→ reproducción no destructiva
+→ causa raíz
+→ parche mínimo
+→ validaciones proporcionales al riesgo
+→ commit y push
+→ despliegue controlado
+→ healthcheck y prueba con empresa afectada
+→ monitoreo
+→ actualización de HANDOFF
+```
+
+### Carril 2 — Local/QA: desarrollo y certificación
+
+El equipo local independiente será el entorno preferido para:
+
+- Nuevas funcionalidades.
+- Refactorizaciones.
+- Cambios de arquitectura.
+- Actualizaciones de dependencias.
+- Migraciones complejas.
+- Automatización de pruebas.
+- Pruebas multi-tenant con `qa-empresa-a` y `qa-empresa-b`.
+- Validación Factus sandbox.
+- Ejecución completa de `RELEASE_VALIDATION.md`.
+
+Los cambios normales deben seguir:
+
+```text
+Rama/commit local
+→ pruebas unitarias/integración
+→ build y lint
+→ QA manual/E2E
+→ revisión de aislamiento y rollback
+→ push
+→ despliegue controlado
+```
+
+### Clasificación y tiempos de respuesta
+
+| Prioridad | Definición | Ejemplos | Acción |
+|---|---|---|---|
+| P0 crítica | Riesgo de datos, seguridad, fiscal o caída general | Fuga cross-tenant, pérdida/corrupción, facturación errónea, indisponibilidad total | Contención inmediata; congelar cambios no relacionados |
+| P1 alta | Empresa o función principal bloqueada | Login roto, 500 repetido, CRUD crítico inutilizable, emisión bloqueada | Hotfix prioritario con rollback |
+| P2 media | Flujo parcial con alternativa segura | Filtro roto, acción secundaria, error con workaround | Corregir primero en local/QA |
+| P3 baja | No bloqueante | Visual, texto, ergonomía, mejora | Backlog local/QA |
+
+### Información mínima por incidente
+
+- Tenant/empresa afectada usando identificador no sensible.
+- Módulo, pantalla y URL relativa.
+- Acción exacta realizada.
+- Mensaje visible y status HTTP si está disponible.
+- Fecha/hora con zona horaria.
+- Frecuencia y cantidad de usuarios afectados.
+- Resultado esperado y resultado obtenido.
+- Captura sanitizada.
+- Request ID o fragmento de log sin secretos/PII.
+- Confirmación de si existe workaround.
+
+### Criterios para cerrar un incidente
+
+- Causa raíz identificada o riesgo residual documentado.
+- Parche mínimo revisado.
+- Sin cambios ajenos mezclados.
+- Validaciones relevantes verdes.
+- Aislamiento tenant comprobado cuando aplique.
+- Backup/rollback disponible.
+- Commit y despliegue identificables.
+- Healthcheck correcto.
+- Empresa afectada confirma el flujo.
+- HANDOFF registra resultado y pendientes.
+
+### Estado operativo
+
+- Se permite continuar la estabilización de empresas activas en este servidor bajo el carril de producción.
+- El desarrollo evolutivo debe trasladarse al equipo local/QA.
+- El dictamen formal de producción no cambia hasta completar la evidencia funcional, pero no impide atender incidentes reales con hotfixes controlados.
