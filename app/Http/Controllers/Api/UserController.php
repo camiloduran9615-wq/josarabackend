@@ -8,13 +8,17 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\UserResource;
 use App\Models\User;
 use App\Services\AuditLogService;
+use App\Services\UserStatusService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 class UserController extends Controller
 {
-    public function __construct(private readonly AuditLogService $auditLog) {}
+    public function __construct(
+        private readonly AuditLogService $auditLog,
+        private readonly UserStatusService $userStatus,
+    ) {}
 
     /**
      * Lista todos los usuarios del tenant activo.
@@ -73,7 +77,7 @@ class UserController extends Controller
      *
      * GET /api/v1/{tenant}/users/{id}
      */
-    public function show(Request $request, string $id): JsonResponse
+    public function show(Request $request, string $tenant, string $id): JsonResponse
     {
         $user = User::findOrFail($id);
 
@@ -93,7 +97,7 @@ class UserController extends Controller
      *
      * PUT /api/v1/{tenant}/users/{id}
      */
-    public function update(Request $request, string $id): JsonResponse
+    public function update(Request $request, string $tenant, string $id): JsonResponse
     {
         $this->authorizeRole($request, [User::ROLE_ADMIN]);
 
@@ -104,7 +108,6 @@ class UserController extends Controller
             'apellido' => ['sometimes', 'string', 'max:100'],
             'email'    => ['sometimes', 'email', 'max:255', Rule::unique('users')->ignore($user->id)],
             'role'     => ['sometimes', Rule::in(User::ROLES)],
-            'activo'   => ['sometimes', 'boolean'],
         ]);
 
         $oldValues = $user->only(array_keys($validated));
@@ -130,7 +133,7 @@ class UserController extends Controller
      *
      * DELETE /api/v1/{tenant}/users/{id}
      */
-    public function destroy(Request $request, string $id): JsonResponse
+    public function destroy(Request $request, string $tenant, string $id): JsonResponse
     {
         $this->authorizeRole($request, [User::ROLE_ADMIN]);
 
@@ -144,17 +147,7 @@ class UserController extends Controller
             ], 422);
         }
 
-        $user->update(['activo' => false]);
-
-        // Revocar todos sus tokens activos
-        $user->tokens()->delete();
-
-        $this->auditLog->record(
-            action:     'user.deactivated',
-            criticidad: AuditLogService::CRITICIDAD_WARNING,
-            auditable:  $user,
-            newValues:  ['activo' => false],
-        );
+        $user = $this->userStatus->setStatus($request->user(), $user, false);
 
         return response()->json([
             'success' => true,
@@ -163,11 +156,40 @@ class UserController extends Controller
     }
 
     /**
+     * Activa o inactiva un usuario de forma explícita e idempotente.
+     *
+     * PATCH /api/v1/{tenant}/users/{id}/status
+     */
+    public function changeStatus(Request $request, string $tenant, string $id): JsonResponse
+    {
+        $user = User::findOrFail($id);
+        $this->authorize('changeStatus', $user);
+
+        $validated = $request->validate([
+            'activo' => ['required', 'boolean'],
+        ]);
+
+        $user = $this->userStatus->setStatus(
+            $request->user(),
+            $user,
+            (bool) $validated['activo'],
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => $user->activo
+                ? "Usuario '{$user->nombre_completo}' activado."
+                : "Usuario '{$user->nombre_completo}' inactivado.",
+            'data' => new UserResource($user),
+        ]);
+    }
+
+    /**
      * Permite a un usuario cambiar su propia contraseña.
      *
      * PUT /api/v1/{tenant}/users/{id}/password
      */
-    public function changePassword(Request $request, string $id): JsonResponse
+    public function changePassword(Request $request, string $tenant, string $id): JsonResponse
     {
         $user = User::findOrFail($id);
 

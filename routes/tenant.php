@@ -104,8 +104,13 @@ Route::prefix('api/v1/{tenant}')
             Route::get('dashboard-ejecutivo', DashboardEjecutivoController::class)->name('dashboard.ejecutivo');
 
             // Gestión de Usuarios
-            Route::apiResource('users', UserController::class);
+            Route::patch('users/{id}/status', [UserController::class, 'changeStatus'])
+                ->whereUuid('id')
+                ->middleware('throttle:10,1')
+                ->name('users.status');
+            Route::apiResource('users', UserController::class)->whereUuid('user');
             Route::put('users/{id}/password', [UserController::class, 'changePassword'])
+                ->whereUuid('id')
                 ->name('users.password');
 
 

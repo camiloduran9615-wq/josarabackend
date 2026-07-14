@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Models\User;
+use App\Policies\UserPolicy;
 use App\Repositories\Central\TarifaIcaRepository;
 use App\Repositories\Central\UvtAnualRepository;
 use App\Repositories\Contracts\TarifaIcaRepositoryInterface;
@@ -17,6 +19,10 @@ use App\Services\Reportes\BalanceComprobacionService;
 use App\Services\Reportes\BalanceGeneralService;
 use App\Services\Reportes\CacheReportesService;
 use App\Services\Reportes\EstadoResultadosService;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Sanctum\Sanctum;
 
@@ -53,6 +59,24 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Gate::policy(User::class, UserPolicy::class);
+
+        RateLimiter::for('tenant-registration', static function (Request $request): array {
+            $ip = $request->ip();
+
+            return [
+                // Evita ráfagas automatizadas incluso cuando el payload es inválido.
+                Limit::perMinute(20)->by('tenant-registration-attempts:'.$ip),
+
+                // El cupo costoso solo se consume cuando la petición supera la
+                // validación. Un 422 debe permitir que el usuario corrija datos
+                // sin quedar bloqueado durante una hora.
+                Limit::perHour(5)
+                    ->by('tenant-registration-provisioning:'.$ip)
+                    ->after(static fn ($response): bool => $response->getStatusCode() !== 422),
+            ];
+        });
+
         $allowedOrigins = array_values(array_filter(array_map(
             static fn (string $origin): string => trim($origin),
             explode(',', (string) env('CORS_ALLOWED_ORIGINS', env('APP_URL', 'https://josara.colombiaapp.fun'))),
