@@ -1032,8 +1032,9 @@ No se modificó lógica de negocio contable, información de tenants, migracione
 - ESLint focalizado: 0 errores; permanece 1 advertencia preexistente del efecto React.
 - Frontend: `npm ci`, auditoría con 0 vulnerabilidades y Vite 8.0.16 compilado correctamente en 1.92 s.
 - Artefactos publicados: `index-BUp4xeWg.js` y `index-CZ31jz7z.css`; raíz pública responde HTTP 200.
-- PHP-FPM está activo. Queda pendiente devolver propietario de `storage` y `bootstrap/cache` a `www-data:www-data` y recargar PHP-FPM con privilegios.
-- La aceptación funcional final queda pendiente de que el usuario afectado vuelva a abrir el modal y confirme que la solicitud responde 200 y permite continuar.
+- PHP-FPM está activo y fue recargado correctamente a las 22:54:05 UTC. `storage` y `bootstrap/cache` quedaron con propietario `www-data:www-data` y permisos 775.
+- Validación posterior al despliegue, inicializando exactamente `comercializadoraaaa`: HTTP 200, `success=true`, módulo `compra`, `valido=true`, 4 de 4 cuentas configuradas y 0 faltantes.
+- El usuario informó “listo” después de ejecutar el cierre operativo. Los logs de acceso disponibles no registraron la petición del navegador, por lo que la evidencia objetiva de backend proviene de la validación tenant de solo lectura indicada arriba.
 
 ### Rollback
 
@@ -1043,6 +1044,6 @@ No se modificó lógica de negocio contable, información de tenants, migracione
 
 ### Pendientes inmediatos
 
-- Ejecutar la prueba funcional guiada con la empresa afectada: abrir factura de compra, comprobar guard, navegación, cancelación/reintento y ausencia del 422.
-- Revisar logs sanitizados durante esa prueba y monitorear nuevos HTTP 422/500.
+- Confirmar visualmente con la empresa afectada que la modal abre y permite continuar; si reaparece el problema, capturar hora exacta, pestaña Network y payload sanitizado.
+- Monitorear nuevos HTTP 422/500 relacionados durante el uso normal.
 - Ejecutar la prueba PHPUnit agregada en el equipo local/QA con dependencias de desarrollo.
