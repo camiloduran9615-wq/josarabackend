@@ -70,7 +70,7 @@ class ParametrizacionContableController extends Controller
      * y redirigir a Configuración → Cuentas Maestras si la parametrización
      * está incompleta. Previene errores 500 al guardar documentos.
      */
-    public function validar(string $modulo): JsonResponse
+    public function validar(string $tenant, string $modulo): JsonResponse
     {
         $clavesRequeridas = self::CLAVES_CRITICAS[$modulo] ?? null;
         if ($clavesRequeridas === null) {
@@ -126,7 +126,7 @@ class ParametrizacionContableController extends Controller
      * GET /parametrizacion-contable
      * Devuelve todas las claves con su cuenta asignada, agrupadas por módulo.
      */
-    public function index(): JsonResponse
+    public function index(string $tenant): JsonResponse
     {
         $params = ParametrizacionContable::with('cuenta:id,codigo,nombre')
             ->orderBy('clave')
@@ -151,7 +151,7 @@ class ParametrizacionContableController extends Controller
      * Actualiza la cuenta de una clave existente.
      * La clave es un string (ej: "compra.cuenta_proveedor"), URL-encoded si tiene punto.
      */
-    public function update(Request $request, string $clave): JsonResponse
+    public function update(Request $request, string $tenant, string $clave): JsonResponse
     {
         $validated = $request->validate([
             'cuenta_contable_id' => ['required', 'uuid', 'exists:cuentas_contables,id'],
@@ -179,7 +179,7 @@ class ParametrizacionContableController extends Controller
      * Actualiza múltiples claves en una sola petición.
      * Body: { updates: [{ clave, cuenta_contable_id }] }
      */
-    public function bulk(Request $request): JsonResponse
+    public function bulk(Request $request, string $tenant): JsonResponse
     {
         $validated = $request->validate([
             'updates'                        => ['required', 'array', 'min:1', 'max:100'],
