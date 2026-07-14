@@ -1003,3 +1003,46 @@ Rama/commit local
 - Se permite continuar la estabilización de empresas activas en este servidor bajo el carril de producción.
 - El desarrollo evolutivo debe trasladarse al equipo local/QA.
 - El dictamen formal de producción no cambia hasta completar la evidencia funcional, pero no impide atender incidentes reales con hotfixes controlados.
+
+## 32. Hotfix parametrización contable al abrir compra — 2026-07-14
+
+### Incidente y causa raíz
+
+- Prioridad: **P1**, porque afectaba la apertura del flujo de creación de factura/compra para un tenant activo.
+- Síntoma funcional: `GET /api/v1/{tenant}/parametrizacion-contable/validar/compra` respondía HTTP 422.
+- Causa raíz: las firmas de `ParametrizacionContableController` no incluían el parámetro de ruta `{tenant}`. Laravel entregaba el slug del tenant en la variable `$modulo`, por lo que se intentaba validar un módulo inexistente.
+- Riesgo adicional corregido: `ParametrizacionGuard` abría el formulario ante cualquier error HTTP (fail-open). Ahora bloquea la apertura, presenta un error controlado y permite cancelar, reintentar o ir a configuración.
+- El error CORS de `static.cloudflareinsights.com/beacon.min.js` corresponde a telemetría de Cloudflare y no causa el HTTP 422 ni bloquea el flujo contable. Se mantiene como asunto P3 independiente.
+
+### Cambios aplicados
+
+| Repositorio | Commit | Cambio |
+|---|---|---|
+| API | `f946450` | Alinea las firmas `index`, `validar`, `update` y `bulk` con `{tenant}` y agrega pruebas de regresión de parámetros de ruta. |
+| Web | `2608b31` | Cambia el guard de parametrización a fail-closed y añade recuperación controlada. |
+
+No se modificó lógica de negocio contable, información de tenants, migraciones ni versiones de dependencias.
+
+### Validaciones y despliegue
+
+- Sintaxis PHP del controlador y de la prueba: correcta.
+- `route:list`: 4 rutas de parametrización contable registradas después de regenerar la caché.
+- Validación directa inicializando el tenant afectado: HTTP 200, módulo `compra`, `valido=true`, 4 cuentas requeridas/configuradas y 0 faltantes.
+- PHPUnit no está instalado en producción porque Composer se despliega con `--no-dev`; la prueba quedó versionada para ejecutarse en local/QA.
+- ESLint focalizado: 0 errores; permanece 1 advertencia preexistente del efecto React.
+- Frontend: `npm ci`, auditoría con 0 vulnerabilidades y Vite 8.0.16 compilado correctamente en 1.92 s.
+- Artefactos publicados: `index-BUp4xeWg.js` y `index-CZ31jz7z.css`; raíz pública responde HTTP 200.
+- PHP-FPM está activo. Queda pendiente devolver propietario de `storage` y `bootstrap/cache` a `www-data:www-data` y recargar PHP-FPM con privilegios.
+- La aceptación funcional final queda pendiente de que el usuario afectado vuelva a abrir el modal y confirme que la solicitud responde 200 y permite continuar.
+
+### Rollback
+
+1. Revertir en web el commit `2608b31`, ejecutar `npm ci` y reconstruir con Vite.
+2. Revertir en API el commit `f946450`, regenerar las cachés Laravel y recargar PHP-FPM.
+3. Verificar HTTP 200 del sitio y registrar el resultado. El rollback reintroduciría el 422 conocido, por lo que solo debe usarse si aparece una regresión más grave.
+
+### Pendientes inmediatos
+
+- Ejecutar la prueba funcional guiada con la empresa afectada: abrir factura de compra, comprobar guard, navegación, cancelación/reintento y ausencia del 422.
+- Revisar logs sanitizados durante esa prueba y monitorear nuevos HTTP 422/500.
+- Ejecutar la prueba PHPUnit agregada en el equipo local/QA con dependencias de desarrollo.
