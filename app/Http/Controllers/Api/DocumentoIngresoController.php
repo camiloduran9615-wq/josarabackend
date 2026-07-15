@@ -16,6 +16,8 @@ use App\Services\Contabilizacion\ContabilizadorService;
 use App\Services\Contabilizacion\ParametrizacionFaltanteException;
 use App\Services\Inventario\CostoPromedioService;
 use App\Services\Inventario\InventarioCuentaResolver;
+use App\Services\Payments\PaymentSelectionService;
+use App\Services\Payments\PaymentAccountingRuleResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -52,6 +54,8 @@ class DocumentoIngresoController extends Controller
         private readonly CostoPromedioService   $cpp,
         private readonly InventarioCuentaResolver $cuentaResolver,
         private readonly AuditLogService        $auditLog,
+        private readonly PaymentSelectionService $paymentSelection,
+        private readonly PaymentAccountingRuleResolver $paymentRuleResolver,
     ) {}
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -94,7 +98,9 @@ class DocumentoIngresoController extends Controller
             'fecha'                           => ['required', 'date'],
             'fecha_vencimiento'               => ['nullable', 'date', 'after_or_equal:fecha'],
             'concepto'                        => ['required', 'string', 'max:500'],
-            'forma_pago'                      => ['required', 'in:contado,contado_efectivo,contado_banco,credito'],
+            'forma_pago'                      => ['nullable', 'required_without:payment_term_id', 'in:contado,contado_efectivo,contado_banco,credito'],
+            'payment_term_id'                  => ['nullable', 'uuid', 'exists:payment_terms,id'],
+            'payment_method_id'                => ['nullable', 'uuid', 'exists:payment_methods,id'],
             'sucursal_id'                     => ['nullable', 'uuid', 'exists:sucursales,id'],
             'centro_costo_id'                 => ['nullable', 'uuid', 'exists:centros_costo,id'],
             'observaciones'                   => ['nullable', 'string', 'max:1000'],
@@ -116,6 +122,15 @@ class DocumentoIngresoController extends Controller
             // gasto/activo_fijo: cuenta contable directa
             'items.*.cuenta_id'               => ['required_if:items.*.tipo_linea,gasto', 'required_if:items.*.tipo_linea,activo_fijo', 'nullable', 'uuid', 'exists:cuentas_contables,id'],
         ]);
+
+        $payment = $this->paymentSelection->forPurchase(
+            $validated['payment_term_id'] ?? null,
+            $validated['payment_method_id'] ?? null,
+            $validated['forma_pago'] ?? null,
+        );
+        $validated['forma_pago'] = $payment['legacy_form'];
+        $validated['payment_term_id'] = $payment['term']?->id;
+        $validated['payment_method_id'] = $payment['method']?->id;
 
         // ── SC-006: Deduplicación por numero_documento_proveedor ────────────
         if (! empty($validated['numero_documento_proveedor'])) {
@@ -196,6 +211,8 @@ class DocumentoIngresoController extends Controller
                 'fecha_vencimiento'          => $validated['fecha_vencimiento'] ?? null,
                 'concepto'                   => $validated['concepto'],
                 'forma_pago'                 => $validated['forma_pago'],
+                'payment_term_id'             => $validated['payment_term_id'] ?? null,
+                'payment_method_id'           => $validated['payment_method_id'] ?? null,
                 'valor_bruto'                => round($bruto, 2),
                 'valor_iva'                  => round($totalIva, 2),
                 'valor_retefuente'           => $retefuente,
@@ -420,10 +437,20 @@ class DocumentoIngresoController extends Controller
                 ? \App\Models\Tenant\CuentaContable::findOrFail($tipoDoc->cuenta_proveedor_id)
                 : $this->contabilizador->cuenta('compra.cuenta_proveedor');
         } elseif (in_array($doc->forma_pago, ['contado', 'contado_efectivo'], true)) {
-            $cuentaContraparte = $this->contabilizador->cuenta('compra.cuenta_caja');
+            $cuentaContraparte = $this->paymentRuleResolver->resolve(
+                'purchase', 'CASH', $doc->payment_term_id, $doc->payment_method_id, $doc->fecha,
+            ) ?? $this->contabilizador->cuenta('compra.cuenta_caja');
         } else {
-            // contado_banco → Bancos
-            $cuentaContraparte = $this->contabilizador->cuenta('compra.cuenta_banco');
+            $role = $doc->paymentMethod?->type === 'card' ? 'CLEARING_ACCOUNT' : 'BANK';
+            $cuentaContraparte = $this->paymentRuleResolver->resolve(
+                'purchase', $role, $doc->payment_term_id, $doc->payment_method_id, $doc->fecha,
+            );
+            if (! $cuentaContraparte && $role === 'CLEARING_ACCOUNT') {
+                $cuentaContraparte = $this->paymentRuleResolver->resolve(
+                    'purchase', 'BANK', $doc->payment_term_id, $doc->payment_method_id, $doc->fecha,
+                );
+            }
+            $cuentaContraparte ??= $this->contabilizador->cuenta('compra.cuenta_banco');
         }
 
         // valor_total ya descontó las retenciones; el crédito al proveedor/caja

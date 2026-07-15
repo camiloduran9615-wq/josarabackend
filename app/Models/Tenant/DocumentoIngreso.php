@@ -21,7 +21,7 @@ class DocumentoIngreso extends Model
         'tercero_id', 'sucursal_id', 'centro_costo_id',
         'tipo_documento_ingreso_id',
         'numero', 'tipo', 'fecha', 'fecha_vencimiento',
-        'concepto', 'forma_pago',
+        'concepto', 'forma_pago', 'payment_term_id', 'payment_method_id',
         'valor_bruto', 'valor_iva', 'valor_retefuente',
         'valor_reteica', 'valor_reteiva', 'valor_total',
         'estado', 'observaciones', 'numero_documento_proveedor',
@@ -38,6 +38,16 @@ class DocumentoIngreso extends Model
         'valor_reteiva' => 'decimal:2',
         'valor_total' => 'decimal:2',
     ];
+
+    public function paymentTerm()
+    {
+        return $this->belongsTo(PaymentTerm::class);
+    }
+
+    public function paymentMethod()
+    {
+        return $this->belongsTo(PaymentMethod::class);
+    }
 
     public function tercero()
     {

@@ -37,6 +37,7 @@ use App\Http\Controllers\Api\NotaCreditoController;
 use App\Http\Controllers\Api\NotaDebitoController;
 use App\Http\Controllers\Api\NotasEstadosFinancierosController;
 use App\Http\Controllers\Api\ParametrizacionContableController;
+use App\Http\Controllers\Api\PaymentConfigurationController;
 // Dashboard KPIs
 use App\Http\Controllers\Api\PeriodoContableController;
 use App\Http\Controllers\Api\ProductoController;
@@ -268,6 +269,20 @@ Route::prefix('api/v1/{tenant}')
             Route::put('parametrizacion-contable/{clave}', [ParametrizacionContableController::class, 'update'])
                 ->where('clave', '.+');   // permite puntos en la clave
             Route::post('parametrizacion-contable/bulk', [ParametrizacionContableController::class, 'bulk']);
+
+            // Condiciones, medios y reglas contables de pago configurables.
+            Route::get('payment-terms', [PaymentConfigurationController::class, 'terms']);
+            Route::post('payment-terms', [PaymentConfigurationController::class, 'storeTerm']);
+            Route::put('payment-terms/{id}', [PaymentConfigurationController::class, 'updateTerm'])->whereUuid('id');
+            Route::patch('payment-terms/{id}/status', [PaymentConfigurationController::class, 'termStatus'])->whereUuid('id');
+            Route::get('payment-methods', [PaymentConfigurationController::class, 'methods']);
+            Route::post('payment-methods', [PaymentConfigurationController::class, 'storeMethod']);
+            Route::put('payment-methods/{id}', [PaymentConfigurationController::class, 'updateMethod'])->whereUuid('id');
+            Route::patch('payment-methods/{id}/status', [PaymentConfigurationController::class, 'methodStatus'])->whereUuid('id');
+            Route::get('payment-accounting-rules', [PaymentConfigurationController::class, 'rules']);
+            Route::post('payment-accounting-rules', [PaymentConfigurationController::class, 'storeRule']);
+            Route::put('payment-accounting-rules/{id}', [PaymentConfigurationController::class, 'updateRule'])->whereUuid('id');
+            Route::delete('payment-accounting-rules/{id}', [PaymentConfigurationController::class, 'destroyRule'])->whereUuid('id');
 
             // Gestión del PUC (Plan Único de Cuentas)
             Route::get('cuentas-contables', [CuentaContableController::class, 'index']);

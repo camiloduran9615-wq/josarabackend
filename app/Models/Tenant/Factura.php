@@ -38,6 +38,8 @@ class Factura extends Model
         'payment_form',
         'payment_method_code',
         'payment_due_date',
+        'payment_term_id',
+        'payment_method_id',
     ];
 
     protected $casts = [
@@ -48,6 +50,16 @@ class Factura extends Model
         'valor_impuestos'   => 'decimal:2',
         'valor_total'       => 'decimal:2',
     ];
+
+    public function paymentTerm()
+    {
+        return $this->belongsTo(PaymentTerm::class);
+    }
+
+    public function paymentMethod()
+    {
+        return $this->belongsTo(PaymentMethod::class);
+    }
 
     public function tercero()
     {

@@ -13,6 +13,7 @@ use App\Services\FactusService;
 use App\Services\FactusMappingService;
 use App\Services\Inventario\CostoPromedioService;
 use App\Services\Inventario\InventarioCuentaResolver;
+use App\Services\Payments\PaymentSelectionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -25,6 +26,7 @@ class FacturaController extends Controller
         protected ContabilizadorService   $contabilizador,
         protected CostoPromedioService    $cpp,
         protected InventarioCuentaResolver $cuentaResolver,
+        protected PaymentSelectionService  $paymentSelection,
     ) {}
 
     /**
@@ -294,9 +296,11 @@ class FacturaController extends Controller
             'tipo_comprobante_id'  => 'required|exists:tipo_comprobantes,id',
             'fecha_emision'        => 'required|date',
             'tercero_id'           => 'required|exists:terceros,id',
-            'payment_form'         => 'required|string',
-            'payment_method_code'  => 'required|string',
-            'payment_due_date'     => 'required_if:payment_form,2|nullable|date|after_or_equal:fecha_emision',
+            'payment_form'         => 'nullable|required_without:payment_term_id|string',
+            'payment_method_code'  => 'nullable|required_without:payment_method_id|string',
+            'payment_term_id'      => 'nullable|uuid|exists:payment_terms,id',
+            'payment_method_id'    => 'nullable|uuid|exists:payment_methods,id',
+            'payment_due_date'     => 'nullable|date|after_or_equal:fecha_emision',
             'observaciones'        => 'nullable|string',
             'items'                => 'required|array|min:1',
             'items.*.nombre'       => 'required|string',
@@ -311,6 +315,24 @@ class FacturaController extends Controller
             'withholding_taxes.*.code' => 'required|string',
             'withholding_taxes.*.rate' => 'required|numeric',
         ]);
+
+        $payment = $this->paymentSelection->forSale(
+            $request->input('payment_term_id'),
+            $request->input('payment_method_id'),
+            $request->input('payment_form'),
+            $request->input('payment_method_code'),
+        );
+        $request->merge([
+            'payment_form' => $payment['payment_form'],
+            'payment_method_code' => $payment['payment_method_code'],
+            'payment_term_id' => $payment['term']?->id,
+            'payment_method_id' => $payment['method']?->id,
+        ]);
+        if ($payment['payment_form'] === '2' && ! $request->filled('payment_due_date')) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'payment_due_date' => 'La fecha de vencimiento es obligatoria para ventas a crédito.',
+            ]);
+        }
 
         $comprobante = TipoComprobante::with('resolucion')->findOrFail($request->tipo_comprobante_id);
         $resolucion  = $comprobante->resolucion;
@@ -471,6 +493,8 @@ class FacturaController extends Controller
             'payment_form'        => $request->payment_form ?? '1',
             'payment_method_code' => $request->payment_method_code ?? '10',
             'payment_due_date'    => ($request->payment_form === '2') ? $request->payment_due_date : null,
+            'payment_term_id'     => $request->payment_term_id,
+            'payment_method_id'   => $request->payment_method_id,
         ], $extra));
 
         // Líneas del asiento de costo de ventas (Db 6135 / Cr 1435), si aplica
