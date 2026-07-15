@@ -1103,3 +1103,18 @@ Revertir el commit del hotfix y recargar PHP-FPM. El rollback vuelve a descartar
 - Se agregaron regresiones de compra de contado en efectivo y por banco. PHPUnit queda pendiente de ejecución local porque producción usa dependencias `--no-dev`.
 - Rollback: ejecutar `tenants:rollback` para esta migración. El `down()` normaliza los dos valores nuevos a `contado` antes de restaurar el CHECK legado, perdiendo intencionalmente la distinción caja/banco; solo usar ante una regresión grave.
 - Pendiente: reintento funcional por el usuario y verificación posterior de documento, Kardex, costo promedio y asiento.
+
+## 36. Módulo configurable de formas de pago — desplegado — 2026-07-15
+- Estado: backend, frontend y migraciones desplegados en producción. Commits API `019d0ee` y web `4787379`.
+- Tablas nuevas: `payment_terms`, `payment_methods`, `payment_term_methods` y `payment_accounting_rules`.
+- Compras y ventas guardan referencias opcionales `payment_term_id`/`payment_method_id` y conservan los campos heredados.
+- El backend deriva contado/crédito, caja/banco, cuenta puente y código DIAN; rechaza condiciones/medios inactivos o incompatibles.
+- UI: `Configuración → Formas de Pago`, con condiciones, medios y reglas contables sobre cuentas PUC activas de movimiento.
+- Migraciones `2026_07_15_000002_create_payment_configuration_tables.php` y `2026_07_15_000003_link_payment_configuration_to_invoices.php` aplicadas correctamente a los 9 tenants, iniciando con `comercializadoraaaa` como piloto.
+- Respaldo previo de los 9 tenants en `/srv/apps/_logs/payment-backups-20260715/`; respaldo adicional del piloto y la base central.
+- Validaciones: sintaxis PHP correcta, TypeScript correcto, ESLint focalizado sin errores y build Vite exitoso (`index-BEZOxgHh.js`).
+- PHPUnit no se ejecutó porque producción está instalada con `composer --no-dev`; las regresiones quedaron en `tests/Feature/Payments`.
+- Documentos de diseño: `PAYMENT_CONFIGURATION_ANALYSIS.md` y `PAYMENT_CONFIGURATION_DESIGN.md`.
+- Gate: migrar dos tenants QA, probar roles/aislamiento, compras efectivo-banco-crédito, ventas contado-crédito con Factus sandbox, Kardex, asientos y cartera.
+- Validación productiva: cada tenant tiene 2 condiciones, 7 medios, 7 asociaciones y columnas de enlace en compras y ventas. Los endpoints protegidos responden 401 sin token en vez de 404.
+- Rollback: revertir web/API y rollback 000003 antes de 000002; no recalcular ni eliminar documentos históricos.
