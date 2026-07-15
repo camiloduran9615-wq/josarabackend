@@ -1047,3 +1047,31 @@ No se modificó lógica de negocio contable, información de tenants, migracione
 - Confirmar visualmente con la empresa afectada que la modal abre y permite continuar; si reaparece el problema, capturar hora exacta, pestaña Network y payload sanitizado.
 - Monitorear nuevos HTTP 422/500 relacionados durante el uso normal.
 - Ejecutar la prueba PHPUnit agregada en el equipo local/QA con dependencias de desarrollo.
+
+## 33. Hotfix persistencia PUC en productos — 2026-07-15
+
+### Diagnóstico
+
+- Síntoma: al abrir un producto existente para editar, los tres selectores de Configuración Contable (PUC) aparecían vacíos.
+- Causa raíz: `ProductoController` validaba y enviaba `inventario_cuenta_id`, `ventas_cuenta_id` y `costos_cuenta_id` a Eloquent, pero esos atributos no estaban en `$fillable` de `App\Models\Tenant\Producto`. Laravel los descartaba silenciosamente en creación y actualización.
+- Evidencia del producto afectado `019f62de-e14a-72ed-8217-a4e28414ff82`: las tres columnas existen en la base, pero estaban en `null`; el producto tampoco tiene categoría de respaldo.
+- Disponibilidad PUC del tenant afectado: 13 cuentas con prefijo 14, 12 con prefijo 41 y 8 con prefijo 61. No era una ausencia del catálogo contable.
+- Las selecciones históricas descartadas no pueden recuperarse de forma confiable. Deben seleccionarse nuevamente; no se asignaron cuentas automáticamente para evitar asientos contables incorrectos.
+
+### Solución y validación
+
+- Se añadieron los tres IDs contables al `$fillable` del modelo y una regresión al test de rutas/productos.
+- Prueba transaccional con cuentas hoja reales: `update()` respondió HTTP 200 y, al recargar el producto, conservó exactamente los tres UUID.
+- La prueba se ejecutó dentro de una transacción con rollback garantizado; no alteró el producto de producción.
+- Sintaxis PHP y `git diff --check`: correctos.
+- No requiere migración, cambios de datos, cambios frontend ni actualización de dependencias.
+
+### Escalabilidad y riesgo
+
+- El almacenamiento mediante llaves foráneas UUID por tenant es adecuado y el resolver contable ya soporta prioridad bodega → producto → categoría → parametrización.
+- El frontend aplana y filtra el árbol PUC en cliente. Es suficiente para el volumen actual, pero como mejora de QA se recomienda migrar la modal al `CuentaAutocomplete` compartido, que cachea el catálogo, limita resultados y permite mostrar errores de carga.
+- Riesgo del hotfix: bajo y localizado a la persistencia de tres atributos previamente ignorados.
+
+### Rollback
+
+Revertir el commit del hotfix y recargar PHP-FPM. El rollback vuelve a descartar las cuentas PUC al guardar productos, por lo que solo se justifica ante una regresión más grave.

@@ -23,6 +23,9 @@ class Producto extends Model
         'stock_minimo', 
         'categoria_id', 
         'porcentaje_iva', 
+        'inventario_cuenta_id',
+        'ventas_cuenta_id',
+        'costos_cuenta_id',
         'activo'
     ];
 

@@ -34,6 +34,15 @@ class ProductoRouteParametersTest extends TenantTestCase
         $this->assertSame($producto->id, $response->getData(true)['data']['id']);
     }
 
+    public function test_product_allows_accounting_account_ids_for_mass_assignment(): void
+    {
+        $fillable = (new Producto())->getFillable();
+
+        $this->assertContains('inventario_cuenta_id', $fillable);
+        $this->assertContains('ventas_cuenta_id', $fillable);
+        $this->assertContains('costos_cuenta_id', $fillable);
+    }
+
     /** @return list<string> */
     private function parameterNames(string $method): array
     {
