@@ -1088,3 +1088,18 @@ Revertir el commit del hotfix y recargar PHP-FPM. El rollback vuelve a descartar
 - Artefactos desplegados: `index-DZIZWUUI.js` y `index-BE7_dUnF.css`; `/documentos-ingreso` responde HTTP 200.
 - Rollback: revertir `5211e2e`, ejecutar `npm ci` y reconstruir/desplegar el frontend.
 - Pendiente: comprobación visual del usuario en su resolución real antes de registrar la compra.
+
+## 35. Hotfix HTTP 500 al registrar factura de compra — 2026-07-15
+
+- Endpoint afectado: `POST /api/v1/{tenant}/facturas-compra`.
+- Cloudflare Insights fue descartado por no guardar relación con el fallo funcional.
+- Causa raíz: frontend y controlador admitían `contado_efectivo`/`contado_banco`, mientras PostgreSQL mantenía el CHECK legado de `documentos_ingreso.forma_pago` limitado a `contado`/`credito`.
+- Excepción comprobada: SQLSTATE `23514`, constraint `documentos_ingreso_forma_pago_check`.
+- Commit API: `085830b` (`fix(purchases): support explicit cash and bank payments`).
+- Migración tenant: amplía el CHECK a `contado`, `contado_efectivo`, `contado_banco` y `credito`; no reescribe datos en `up()`.
+- Se aplicó correctamente a los 9 tenants; el tenant afectado `19c9113e-371f-4fba-9ec7-012d7aa6593e` fue validado primero.
+- Prueba transaccional con rollback: efectivo y banco fueron aceptados; no quedaron registros de prueba.
+- El intento fallido con `FACT-001` fue atómico: 0 documentos `FACT-001`, 0 documentos `ING-000001` y 0 movimientos de inventario asociados.
+- Se agregaron regresiones de compra de contado en efectivo y por banco. PHPUnit queda pendiente de ejecución local porque producción usa dependencias `--no-dev`.
+- Rollback: ejecutar `tenants:rollback` para esta migración. El `down()` normaliza los dos valores nuevos a `contado` antes de restaurar el CHECK legado, perdiendo intencionalmente la distinción caja/banco; solo usar ante una regresión grave.
+- Pendiente: reintento funcional por el usuario y verificación posterior de documento, Kardex, costo promedio y asiento.
