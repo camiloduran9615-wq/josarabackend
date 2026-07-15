@@ -1075,3 +1075,16 @@ No se modificó lógica de negocio contable, información de tenants, migracione
 ### Rollback
 
 Revertir el commit del hotfix y recargar PHP-FPM. El rollback vuelve a descartar las cuentas PUC al guardar productos, por lo que solo se justifica ante una regresión más grave.
+
+## 34. Ajuste visual modal de factura de compra — 2026-07-15
+
+- Repositorio web, commit `5211e2e` (`fix(purchases): improve purchase invoice modal layout`).
+- Alcance exclusivamente visual: encabezado y descripción claros, cuerpo con scroll interno, jerarquía de secciones, filas de productos, retenciones, resumen y acciones responsive.
+- Breakpoints específicos para escritorio, tableta y móvil; en pantallas pequeñas los campos, retenciones y botones se apilan sin conservar anchos fijos.
+- Se añadió `type="button"` y etiqueta accesible al cierre de la modal.
+- No se modificaron cálculos, retenciones, inventario, validaciones ni payload de creación.
+- ESLint focalizado: 0 errores y 2 advertencias React preexistentes.
+- Build TypeScript/Vite exitoso; `npm audit` reportó 0 vulnerabilidades.
+- Artefactos desplegados: `index-DZIZWUUI.js` y `index-BE7_dUnF.css`; `/documentos-ingreso` responde HTTP 200.
+- Rollback: revertir `5211e2e`, ejecutar `npm ci` y reconstruir/desplegar el frontend.
+- Pendiente: comprobación visual del usuario en su resolución real antes de registrar la compra.
