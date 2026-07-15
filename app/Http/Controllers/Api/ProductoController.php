@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\DB;
 
 class ProductoController extends Controller
 {
-    public function index()
+    public function index(string $tenant)
     {
         return response()->json([
             'success' => true,
@@ -18,7 +18,7 @@ class ProductoController extends Controller
         ]);
     }
 
-    public function store(Request $request)
+    public function store(Request $request, string $tenant)
     {
         $validated = $request->validate([
             'codigo' => 'required|unique:productos,codigo',
@@ -61,7 +61,15 @@ class ProductoController extends Controller
         });
     }
 
-    public function update(Request $request, $id)
+    public function show(string $tenant, string $id)
+    {
+        return response()->json([
+            'success' => true,
+            'data' => Producto::with('categoria')->findOrFail($id),
+        ]);
+    }
+
+    public function update(Request $request, string $tenant, string $id)
     {
         $producto = Producto::findOrFail($id);
 
@@ -90,7 +98,7 @@ class ProductoController extends Controller
         ]);
     }
 
-    public function destroy($id)
+    public function destroy(string $tenant, string $id)
     {
         $producto = Producto::findOrFail($id);
         $producto->delete();
@@ -104,7 +112,7 @@ class ProductoController extends Controller
     /**
      * Registra un movimiento manual de inventario.
      */
-    public function registrarMovimiento(Request $request)
+    public function registrarMovimiento(Request $request, string $tenant)
     {
         $validated = $request->validate([
             'producto_id'    => 'required|exists:productos,id',
