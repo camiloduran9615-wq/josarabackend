@@ -270,6 +270,60 @@ class CompraInventarioTest extends TenantTestCase
             'Compra de contado NO debe acreditar Proveedores (220505)');
     }
 
+    #[\PHPUnit\Framework\Attributes\Test]
+    public function compra_contado_efectivo_es_aceptada_por_la_base_de_datos(): void
+    {
+        $this->seedFixtures();
+
+        $response = $this->actingAs($this->contador, 'sanctum')
+            ->postJson($this->tenantUrl('/documentos-ingreso'), [
+                'tercero_id' => $this->proveedor->id,
+                'tipo' => 'factura_compra',
+                'fecha' => now()->toDateString(),
+                'concepto' => 'Compra de contado en efectivo',
+                'forma_pago' => 'contado_efectivo',
+                'items' => [[
+                    'tipo_linea' => 'producto',
+                    'producto_id' => $this->producto->id,
+                    'bodega_id' => $this->bodega->id,
+                    'descripcion' => 'Producto de Prueba',
+                    'cantidad' => 1,
+                    'precio_unitario' => 60000,
+                    'porcentaje_iva' => 0,
+                ]],
+            ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('data.forma_pago', 'contado_efectivo');
+    }
+
+    #[\PHPUnit\Framework\Attributes\Test]
+    public function compra_contado_banco_es_aceptada_por_la_base_de_datos(): void
+    {
+        $this->seedFixtures();
+
+        $response = $this->actingAs($this->contador, 'sanctum')
+            ->postJson($this->tenantUrl('/documentos-ingreso'), [
+                'tercero_id' => $this->proveedor->id,
+                'tipo' => 'factura_compra',
+                'fecha' => now()->toDateString(),
+                'concepto' => 'Compra de contado por banco',
+                'forma_pago' => 'contado_banco',
+                'items' => [[
+                    'tipo_linea' => 'producto',
+                    'producto_id' => $this->producto->id,
+                    'bodega_id' => $this->bodega->id,
+                    'descripcion' => 'Producto de Prueba',
+                    'cantidad' => 1,
+                    'precio_unitario' => 60000,
+                    'porcentaje_iva' => 0,
+                ]],
+            ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('data.forma_pago', 'contado_banco');
+    }
+
     // ─── SC-003: Múltiples ítems con distintas tasas de IVA ──────────────────
 
     /**
